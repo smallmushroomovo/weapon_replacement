@@ -6,7 +6,7 @@
 #include <cstrike>
 #include <clientprefs>
 
-#define PLUGIN_VERSION "3.2"
+#define PLUGIN_VERSION "3.3"
 
 // 武器定义
 #define WEAPON_P2000 "weapon_hkp2000"
@@ -428,35 +428,35 @@ void CheckAndReplaceWeapons(int client)
         {
             // 检查主武器槽是否已被替换
             if (FindWeapon(client, WEAPON_M4A1) == -1)
-                ReplaceWeapon(client, WEAPON_M4A4, WEAPON_M4A1);
+                ReplaceWeapon(client, WEAPON_M4A4, WEAPON_M4A1, false);
         }
         if (g_Prefs[client].ReplaceP2000)
         {
             if (FindWeapon(client, WEAPON_USP) == -1)
-                ReplaceWeapon(client, WEAPON_P2000, WEAPON_USP);
+                ReplaceWeapon(client, WEAPON_P2000, WEAPON_USP, false);
         }
         if (g_Prefs[client].ReplacePistols)
         {
             if (FindWeapon(client, WEAPON_CZ75) == -1)
-                ReplaceWeapon(client, WEAPON_FIVESEVEN, WEAPON_CZ75);
+                ReplaceWeapon(client, WEAPON_FIVESEVEN, WEAPON_CZ75, false);
         }
     }
     else if (GetClientTeam(client) == CS_TEAM_T && g_Prefs[client].ReplacePistols)
     {
         if (FindWeapon(client, WEAPON_CZ75) == -1)
-            ReplaceWeapon(client, WEAPON_TEC9, WEAPON_CZ75);
+            ReplaceWeapon(client, WEAPON_TEC9, WEAPON_CZ75, false);
     }
     
     if (g_Prefs[client].ReplaceMP7)
     {
         // 检查主武器槽是否已被替换
         if (FindWeapon(client, WEAPON_MP5) == -1)
-            ReplaceWeapon(client, WEAPON_MP7, WEAPON_MP5);
+            ReplaceWeapon(client, WEAPON_MP7, WEAPON_MP5, false);
     }
     if (g_Prefs[client].ReplaceDeagle)
     {
         if (FindWeapon(client, WEAPON_R8) == -1)
-            ReplaceWeapon(client, WEAPON_DEAGLE, WEAPON_R8);
+            ReplaceWeapon(client, WEAPON_DEAGLE, WEAPON_R8, false);
     }
 }
 
@@ -484,42 +484,42 @@ public Action Event_ItemPurchase(Event event, const char[] name, bool dontBroadc
     if (g_Prefs[client].ReplaceP2000 && StrEqual(normalizedWeapon, "hkp2000"))
     {
         if (FindWeapon(client, WEAPON_USP) == -1)
-            ReplaceWeapon(client, WEAPON_P2000, WEAPON_USP);
+            ReplaceWeapon(client, WEAPON_P2000, WEAPON_USP, true);
     }
     else if (g_Prefs[client].ReplaceM4A4 && StrEqual(normalizedWeapon, "m4a1"))
     {
         // 防止重复替换
         if (FindWeapon(client, WEAPON_M4A1) == -1)
-            ReplaceWeapon(client, WEAPON_M4A4, WEAPON_M4A1);
+            ReplaceWeapon(client, WEAPON_M4A4, WEAPON_M4A1, true);
     }
     else if (g_Prefs[client].ReplaceMP7 && StrEqual(normalizedWeapon, "mp7"))
     {
         if (FindWeapon(client, WEAPON_MP5) == -1)
-            ReplaceWeapon(client, WEAPON_MP7, WEAPON_MP5);
+            ReplaceWeapon(client, WEAPON_MP7, WEAPON_MP5, true);
     }
     else if (g_Prefs[client].ReplaceDeagle && StrEqual(normalizedWeapon, "deagle"))
     {
         if (FindWeapon(client, WEAPON_R8) == -1)
-            ReplaceWeapon(client, WEAPON_DEAGLE, WEAPON_R8);
+            ReplaceWeapon(client, WEAPON_DEAGLE, WEAPON_R8, true);
     }
     else if (g_Prefs[client].ReplacePistols)
     {
         if (GetClientTeam(client) == CS_TEAM_CT && StrEqual(normalizedWeapon, "fiveseven"))
         {
             if (FindWeapon(client, WEAPON_CZ75) == -1)
-                ReplaceWeapon(client, WEAPON_FIVESEVEN, WEAPON_CZ75);
+                ReplaceWeapon(client, WEAPON_FIVESEVEN, WEAPON_CZ75, true);
         }
         else if (GetClientTeam(client) == CS_TEAM_T && StrEqual(normalizedWeapon, "tec9"))
         {
             if (FindWeapon(client, WEAPON_CZ75) == -1)
-                ReplaceWeapon(client, WEAPON_TEC9, WEAPON_CZ75);
+                ReplaceWeapon(client, WEAPON_TEC9, WEAPON_CZ75, true);
         }
     }
     
     return Plugin_Continue;
 }
 
-void ReplaceWeapon(int client, const char[] oldWeapon, const char[] newWeapon)
+void ReplaceWeapon(int client, const char[] oldWeapon, const char[] newWeapon, bool refundMoney = true)
 {
     // 将替换请求加入队列
     char replaceInfo[64];
@@ -529,6 +529,7 @@ void ReplaceWeapon(int client, const char[] oldWeapon, const char[] newWeapon)
     DataPack pack = new DataPack();
     pack.WriteCell(GetClientUserId(client));
     pack.WriteString(replaceInfo);
+    pack.WriteCell(refundMoney); // 保存是否应该退款的信息
     // 调整替换延迟以减少冲突
     float delay = g_bIsDeathmatch ? 0.5 : 0.2;
     CreateTimer(delay, Timer_ProcessWeaponReplace, pack, TIMER_FLAG_NO_MAPCHANGE);
@@ -540,6 +541,7 @@ public Action Timer_ProcessWeaponReplace(Handle timer, DataPack pack)
     int client = GetClientOfUserId(pack.ReadCell());
     char replaceInfo[64];
     pack.ReadString(replaceInfo, sizeof(replaceInfo));
+    bool refundMoney = pack.ReadCell();
     delete pack;
     
     if (!IsValidClient(client) || !IsPlayerAlive(client))
@@ -634,8 +636,8 @@ public Action Timer_ProcessWeaponReplace(Handle timer, DataPack pack)
         ClientCommand(client, "use %s", newWeapon);
     }
     
-    // 调整玩家金钱
-    if (oldPrice != newPrice)
+    // 调整玩家金钱 - 只有当 refundMoney 为 true 时才执行
+    if (refundMoney && oldPrice != newPrice)
     {
         int currentMoney = GetEntProp(client, Prop_Send, "m_iAccount");
         int moneyDiff = oldPrice - newPrice; // 正数表示退款，负数表示扣款

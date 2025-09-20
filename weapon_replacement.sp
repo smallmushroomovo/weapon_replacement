@@ -395,7 +395,7 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
     
     g_hWeaponReplaceQueue[client].Clear();
     // 增加延迟以确保武器生成
-    CreateTimer(g_bIsDeathmatch ? 3.0 : 1.0, Timer_CheckInitialWeapons, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(g_bIsDeathmatch ? 1.5 : 1.0, Timer_CheckInitialWeapons, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
     return Plugin_Continue;
 }
 
